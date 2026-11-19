@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from conftest import make_item
+from hunter.config import PipelineCfg
 from hunter.models import RawItem
 from hunter.pipeline import Pipeline
 
@@ -37,6 +38,20 @@ async def test_fixture_set_produces_expected_alerts(cfg, db):
     ]
     got_ids = [a.item.item_id for a in alerts]
     assert sorted(got_ids) == sorted(expected_ids), rejections
+
+
+async def test_staleness_cutoff_is_configurable_end_to_end(cfg, db):
+    old_item = make_item(source="lemmy", item_id="stale-config", minutes_ago=45)
+    strict = cfg.model_copy(update={"pipeline": PipelineCfg(staleness_cutoff_minutes=30)})
+    lenient = cfg.model_copy(update={"pipeline": PipelineCfg(staleness_cutoff_minutes=60)})
+
+    rejected = await Pipeline(strict, db).process(old_item)
+    assert rejected.alert is None
+    assert rejected.rejected == "stale"
+
+    accepted = await Pipeline(lenient, db).process(old_item)
+    assert accepted.alert is not None
+    assert accepted.alert.validation_status == "candidate_valid"
 
 
 async def test_pipeline_dedupes_across_sources(cfg, db):

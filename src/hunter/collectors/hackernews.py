@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from datetime import UTC, datetime
 
 from ..models import RawItem
@@ -52,13 +53,16 @@ class HackerNewsCollector(Collector):
         author = hit.get("author")
         if not item_id or not author:
             return None
-        text = hit.get("comment_text") or hit.get("title") or hit.get("story_text") or ""
-        url = hit.get("url") or ""
+        # Algolia HTML-escapes hit text: a referral link in a comment is often
+        # returned as "https:&#x2F;&#x2F;claude.ai&#x2F;referral&#x2F;CODE".
+        # Unescape it so the pipeline's bare-URL / href extractors can see the
+        # real link. Include every text field (title, story_text, comment_text)
+        # because a referral link can live in any of them.
+        parts = [hit.get("comment_text"), hit.get("story_text"), hit.get("title")]
+        text = html.unescape(" ".join(str(part) for part in parts if part))
+        url = html.unescape(hit.get("url") or "")
         object_id = hit["objectID"]
-        if hit.get("comment_text") is not None:
-            permalink = f"https://news.ycombinator.com/item?id={object_id}"
-        else:
-            permalink = f"https://news.ycombinator.com/item?id={object_id}"
+        permalink = f"https://news.ycombinator.com/item?id={object_id}"
         ts = int(hit.get("created_at_i", 0))
         posted = datetime.fromtimestamp(ts, UTC) if ts else None
         return RawItem(

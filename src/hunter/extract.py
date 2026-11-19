@@ -89,9 +89,20 @@ def match_referral(
 
 
 def compile_pattern(pattern: str) -> re.Pattern[str]:
-    """Compile the configured referral pattern, adding a named `code` group if absent."""
+    """Compile the configured referral pattern, adding a named `code` group if absent.
+
+    The configured pattern ends with the code character class and quantifier
+    (e.g. ``[A-Za-z0-9_-]{6,60}``). Wrapping that trailing class means any
+    configured code shape keeps working without hard-coding a specific length.
+    """
     if "(?P<code>" not in pattern:
-        pattern = pattern.replace("[A-Za-z0-9_]{6,20}", "(?P<code>[A-Za-z0-9_]{6,20})")
+        trailing = re.search(r"\[[^\]]+\]\{\d+(?:,\d*)?\}$", pattern)
+        if trailing:
+            pattern = (
+                pattern[: trailing.start()]
+                + f"(?P<code>{trailing.group(0)})"
+                + pattern[trailing.end():]
+            )
     try:
         return re.compile(pattern)
     except re.error as exc:

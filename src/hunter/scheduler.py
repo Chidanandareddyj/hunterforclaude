@@ -39,11 +39,16 @@ class Scheduler:
 
         from .collectors import (
             BlueskyCollector,
+            BlueskySearchCollector,
             ClaudeCoworkCourseCollector,
+            GitHubCollector,
             HackerNewsCollector,
             LemmyCollector,
+            MastodonCollector,
             OneParrainageCollector,
+            RedditCollector,
             TelegramPreviewCollector,
+            WebSearchCollector,
         )
 
         client = httpx.AsyncClient(timeout=30, follow_redirects=False)
@@ -55,6 +60,11 @@ class Scheduler:
             ClaudeCoworkCourseCollector(self.db, s.claudecoworkcourse, client),
             OneParrainageCollector(self.db, s.oneparrainage, client, gates_ok=False),
             TelegramPreviewCollector(self.db, s.telegram_preview, client),
+            BlueskySearchCollector(self.db, s.bluesky_search, client),
+            RedditCollector(self.db, s.reddit, client),
+            MastodonCollector(self.db, s.mastodon, client),
+            GitHubCollector(self.db, s.github, client),
+            WebSearchCollector(self.db, s.web_search, client),
         ]
 
     async def run(self) -> None:

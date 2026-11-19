@@ -104,4 +104,9 @@ def filter_candidate(
         return "stale"
     if not not_muted(candidate, mute_state):
         return "muted"
+    from .validate import validate_candidate
+
+    val = validate_candidate(candidate)
+    if not val.is_valid:
+        return val.status
     return None

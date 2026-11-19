@@ -124,6 +124,11 @@ class Pipeline:
             "claudecoworkcourse": self.cfg.sources.claudecoworkcourse.trust,
             "oneparrainage": self.cfg.sources.oneparrainage.trust,
             "telegram_preview": self.cfg.sources.telegram_preview.trust,
+            "bluesky_search": self.cfg.sources.bluesky_search.trust,
+            "reddit": self.cfg.sources.reddit.trust,
+            "mastodon": self.cfg.sources.mastodon.trust,
+            "github": self.cfg.sources.github.trust,
+            "web_search": self.cfg.sources.web_search.trust,
         }
         trust = trust_by_name.get(source, 0.5)
         async with self.db.conn.execute(

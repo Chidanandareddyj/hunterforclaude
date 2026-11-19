@@ -60,6 +60,12 @@ def score_candidate(
     history = author_history(mute_state)
     score = source_trust * decay * boost * history
     silent = score < scoring.normal_threshold
+    from .validate import freshness_status, get_source_reliability
+
+    # filter_candidate() already validated this candidate before it reached the
+    # scorer. Reuse the cheap freshness-based status instead of re-running the
+    # full validation (regex + troll + entropy checks) a second time.
+    tier, _ = get_source_reliability(candidate.item.source)
     return Alert(
         code=candidate.code,
         url=candidate.url,
@@ -70,4 +76,6 @@ def score_candidate(
         confidence=confidence_tag(age, scoring, staleness_cutoff_minutes),
         age_seconds=age,
         sources=[candidate.item.source],
+        reliability_tier=tier,
+        validation_status=freshness_status(age),
     )

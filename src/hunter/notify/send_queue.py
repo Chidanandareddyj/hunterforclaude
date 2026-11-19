@@ -49,6 +49,9 @@ class SendQueue:
 
     async def stop(self) -> None:
         if self._task:
+            # A paused drain is blocked on _paused.wait() and would never reach
+            # the sentinel, hanging shutdown. Unblock it so it can exit.
+            self.resume()
             await self._queue.put(None)
             await self._task
             self._task = None

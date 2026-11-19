@@ -97,11 +97,15 @@ class TelegramBot:
 
     # -- commands -------------------------------------------------------------
 
-    def _only_owner(self, update: Update) -> bool:
-        return update.effective_chat is not None
+    async def _only_owner(self, update: Update) -> bool:
+        """Only the locked owner chat may issue commands (bootstrapped by /start)."""
+        if update.effective_chat is None:
+            return False
+        owner = await self.owner_chat_id()
+        return owner is not None and update.effective_chat.id == owner
 
     async def _cmd_pause(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if not self._only_owner(update):
+        if not await self._only_owner(update):
             return
         self.state.paused = True
         if self.state.queue:
@@ -110,7 +114,7 @@ class TelegramBot:
             await update.effective_message.reply_text("Paused. Alerts are queued, not sent.")
 
     async def _cmd_resume(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if not self._only_owner(update):
+        if not await self._only_owner(update):
             return
         self.state.paused = False
         if self.state.queue:
@@ -119,7 +123,7 @@ class TelegramBot:
             await update.effective_message.reply_text("Resumed.")
 
     async def _cmd_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if not self._only_owner(update):
+        if not await self._only_owner(update):
             return
         stats = await self.state.db.stats()
         lines = [
@@ -134,7 +138,7 @@ class TelegramBot:
             await update.effective_message.reply_text("\n".join(lines))
 
     async def _cmd_sources(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if not self._only_owner(update):
+        if not await self._only_owner(update):
             return
         rows = await self.state.db.source_health()
         lines = []
@@ -153,7 +157,7 @@ class TelegramBot:
             )
 
     async def _cmd_unmute(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if not self._only_owner(update):
+        if not await self._only_owner(update):
             return
         if not context.args:
             muted_s = await self.state.db.muted_sources()
@@ -167,8 +171,9 @@ class TelegramBot:
                     + "\n".join(lines)
                 )
             return
-        kind, _, name = context.args[0].partition(" ")
-        name = name.strip() or kind
+        # context.args is already tokenized: ["source", "name"] or ["author", "handle"].
+        kind = context.args[0]
+        name = " ".join(context.args[1:]).strip() or kind
         if kind == "source":
             n = await self.state.db.unmute_source(name)
         else:

@@ -3,7 +3,7 @@
 
 # Referral link shape. Confirmed against real public examples before relying on it;
 # keep configurable (DESIGN.md §3 "Link format").
-url_pattern: 'https://claude\.ai/referral/[A-Za-z0-9_]{6,20}'
+url_pattern: 'https://claude\.ai/referral/[A-Za-z0-9_-]{6,60}'
 canonical_link_prefix: "https://claude.ai/referral/"
 
 pipeline:
@@ -42,7 +42,7 @@ sources:
     trust: 0.8
   bluesky:
     enabled: true
-    jetstream_url: "wss://jetstream2-firehose.fly.dev"
+    jetstream_url: "wss://jetstream1.us-east.bsky.network"
     wanted_collection: "app.bsky.feed.post"
     trust: 0.7
   hackernews:
@@ -65,6 +65,35 @@ sources:
     interval_seconds: 15
     # t.me/s/<handle> public preview pages. Empty seed list by default.
     channels: []                    # e.g. ["somechannel"]
+    trust: 0.5
+  bluesky_search:
+    enabled: true
+    interval_seconds: 60
+    # Public AppView search catches posts published while the app was offline.
+    # api.bsky.app works from more networks than the geo-blocked public endpoint.
+    endpoint: "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts"
+    query: "claude.ai/referral"
+    trust: 0.7
+  reddit:
+    enabled: true
+    interval_seconds: 60
+    subreddits: ["ClaudeCode", "ClaudeAI", "anthropic"]
+    query: "claude.ai/referral"
+    trust: 0.7
+  mastodon:
+    enabled: true
+    interval_seconds: 60
+    instances: ["mastodon.social", "fosstodon.org", "techhub.social"]
+    hashtags: ["ClaudeCode", "ClaudeAI"]
+    trust: 0.6
+  github:
+    enabled: false                  # public search is rate-limited (~10/min)
+    interval_seconds: 300
+    query: "claude.ai/referral"
+    trust: 0.5
+  web_search:
+    enabled: false                  # DDG/Bing block this network; opt-in only
+    interval_seconds: 300
     trust: 0.5
 
 notify:
