@@ -1,0 +1,6 @@
+[
+  {"item_id": "fx-lemmy-valid"},
+  {"item_id": "fx-bsky-valid"},
+  {"item_id": "fx-gate-dated", "silent": true},
+  {"item_id": "fx-tg-valid", "silent": true}
+]

@@ -1,0 +1,83 @@
+# Hunter — configuration (non-secret settings live here).
+# Copy to config.yaml and adjust. Secrets go in .env (see .env.example).
+
+# Referral link shape. Confirmed against real public examples before relying on it;
+# keep configurable (DESIGN.md §3 "Link format").
+url_pattern: 'https://claude\.ai/referral/[A-Za-z0-9_]{6,20}'
+canonical_link_prefix: "https://claude.ai/referral/"
+
+pipeline:
+  # Posts older than this are never alerted on.
+  staleness_cutoff_minutes: 30
+  # A code re-posted after this many hours may re-alert if it was never marked Dead.
+  realert_after_hours: 24
+
+scoring:
+  # score = source_trust * freshness_decay * corroboration_boost * author_history
+  # Score never drops a candidate; it only chooses silent vs normal notification.
+  normal_threshold: 0.55
+  freshness_decay:
+    half_life_minutes: 20   # score halves every 20 minutes of age
+  corroboration:
+    # boost = 1 + extra_sources_weight * (n_sources - 1), capped
+    extra_sources_weight: 0.15
+    max_boost: 1.5
+  confidence_tags:            # age thresholds in minutes
+    green_under: 5
+    yellow_under: 15
+    # 15..30 -> orange; beyond staleness cutoff never alerts
+
+auto_mute:
+  author_consecutive_dead: 3        # 3 ❌ in a row mutes the author
+  source_min_votes: 5               # source needs >= this many votes
+  source_dead_rate: 0.7             # ...and dead rate >= this to mute
+
+sources:
+  lemmy:
+    enabled: true
+    interval_seconds: 30
+    base_url: "https://lemmy.world"
+    community: "claudeai"           # mirror community; verify liveness first (README)
+    search_term: "claude.ai/referral"
+    trust: 0.8
+  bluesky:
+    enabled: true
+    jetstream_url: "wss://jetstream2-firehose.fly.dev"
+    wanted_collection: "app.bsky.feed.post"
+    trust: 0.7
+  hackernews:
+    enabled: true
+    interval_seconds: 60
+    algolia_url: "https://hn.algolia.com/api/v1/search_by_date"
+    trust: 0.6
+  claudecoworkcourse:
+    enabled: true
+    interval_seconds: 240
+    url: "https://claudecoworkcourse.com/claude-guest-passes"
+    trust: 0.35                     # directory codes may be exhausted: low confidence
+  oneparrainage:
+    enabled: false                  # GATED: read robots.txt and ToS manually first (DESIGN.md §8)
+    interval_seconds: 300
+    url: "https://1parrainage.com/claude"
+    trust: 0.3
+  telegram_preview:
+    enabled: true
+    interval_seconds: 15
+    # t.me/s/<handle> public preview pages. Empty seed list by default.
+    channels: []                    # e.g. ["somechannel"]
+    trust: 0.5
+
+notify:
+  telegram:
+    # Bot is locked to the first chat that sends /start (owner chat).
+    # disable_notification=true for low-score (silent) alerts.
+    parse_mode: "HTML"
+
+heartbeat:
+  # Daily "alive" message. Time is local, HH:MM. Empty to disable.
+  time: "09:00"
+
+health:
+  # Alert the owner if a source has errored for >10 min or been silent >24 h.
+  error_after_minutes: 10
+  silent_after_hours: 24

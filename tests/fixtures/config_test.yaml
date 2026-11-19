@@ -1,0 +1,54 @@
+# Test config: deterministic values for the fixture set.
+url_pattern: 'https://claude\.ai/referral/[A-Za-z0-9_]{6,20}'
+canonical_link_prefix: "https://claude.ai/referral/"
+
+pipeline:
+  staleness_cutoff_minutes: 30
+  realert_after_hours: 24
+
+scoring:
+  normal_threshold: 0.55
+  freshness_decay:
+    half_life_minutes: 20
+  corroboration:
+    extra_sources_weight: 0.15
+    max_boost: 1.5
+
+auto_mute:
+  author_consecutive_dead: 3
+  source_min_votes: 5
+  source_dead_rate: 0.7
+
+sources:
+  lemmy:
+    enabled: true
+    interval_seconds: 30
+    base_url: "https://lemmy.example"
+    community: "claudeai"
+    search_term: "claude.ai/referral"
+    trust: 0.8
+  bluesky:
+    enabled: true
+    jetstream_url: "wss://jetstream.example"
+    wanted_collection: "app.bsky.feed.post"
+    trust: 0.7
+  hackernews:
+    enabled: false
+    interval_seconds: 60
+    algolia_url: "https://hn.example/api/v1/search_by_date"
+    trust: 0.6
+  claudecoworkcourse:
+    enabled: false
+    interval_seconds: 240
+    url: "https://dir.example/claude-guest-passes"
+    trust: 0.35
+  oneparrainage:
+    enabled: false
+    interval_seconds: 300
+    url: "https://gate.example/claude"
+    trust: 0.3
+  telegram_preview:
+    enabled: false
+    interval_seconds: 15
+    channels: []
+    trust: 0.5

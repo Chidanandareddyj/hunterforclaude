@@ -1,0 +1,10 @@
+services:
+  hunter:
+    build: .
+    container_name: hunter
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
+    restart: unless-stopped
+    stop_grace_period: 30s
