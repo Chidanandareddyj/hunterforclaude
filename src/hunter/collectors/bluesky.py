@@ -45,7 +45,7 @@ class BlueskyCollector(Collector):
         url = f"{self.cfg.jetstream_url}/subscribe"
         params = []
         if self.cfg.wanted_collection:
-            params.append(f"wanted_collection={self.cfg.wanted_collection}")
+            params.append(f"wantedCollections={self.cfg.wanted_collection}")
         if cursor:
             params.append(f"cursor={cursor}")
         if params:
@@ -92,7 +92,7 @@ class BlueskyCollector(Collector):
         text = record.get("text", "")
         now = datetime.now(UTC)
         posted = None
-        created = record.get("created_at")
+        created = record.get("createdAt") or record.get("created_at")
         if created:
             try:
                 posted = datetime.fromisoformat(created.replace("Z", "+00:00"))
@@ -101,13 +101,28 @@ class BlueskyCollector(Collector):
         did = commit.get("repo", "")
         rkey = commit.get("rkey", "")
         permalink = f"https://bsky.app/profile/{did}/post/{rkey}"
+        # Link embeds live under record["embed"]["external"], and explicit links
+        # under record["facets"][*]["features"][*]["uri"]. RawItem.urls is a
+        # list[str]; passing the bare uri string here raised a validation error.
+        urls: list[str] = []
+        embed = record.get("embed")
+        if isinstance(embed, dict):
+            external = embed.get("external")
+            if isinstance(external, dict) and external.get("uri"):
+                urls.append(external["uri"])
+        for facet in record.get("facets") or []:
+            if not isinstance(facet, dict):
+                continue
+            for feature in facet.get("features") or []:
+                if isinstance(feature, dict) and feature.get("uri"):
+                    urls.append(feature["uri"])
         return [
             RawItem(
                 source=self.name,
                 item_id=f"{did}/{rkey}",
                 author=did,
                 text=text,
-                urls=record.get("external", {}).get("uri") if isinstance(record.get("external"), dict) else [],
+                urls=urls,
                 permalink=permalink,
                 posted_at=posted or now,
                 fetched_at=now,
@@ -123,4 +138,8 @@ class BlueskyCollector(Collector):
             # fire-and-forget save (db calls are quick)
             import asyncio as _aio
 
-            _aio.get_running_loop().create_task(self.save_cursor(str(ts)))
+            try:
+                loop = _aio.get_running_loop()
+            except RuntimeError:
+                return  # safe when _handle_message is called outside a loop
+            loop.create_task(self.save_cursor(str(ts)))

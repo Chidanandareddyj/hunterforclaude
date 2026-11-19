@@ -13,6 +13,12 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field, ValidationError
 
+from .collectors.bluesky_search import BlueskySearchSource
+from .collectors.github import GitHubSource
+from .collectors.mastodon import MastodonSource
+from .collectors.reddit import RedditSource
+from .collectors.web_search import WebSearchSource
+
 
 class ConfigError(Exception):
     """Raised when configuration is missing or invalid. Message is user-facing."""
@@ -61,7 +67,7 @@ class LemmySource(BaseModel):
 
 class BlueskySource(BaseModel):
     enabled: bool = False
-    jetstream_url: str = "wss://jetstream2-firehose.fly.dev"
+    jetstream_url: str = "wss://jetstream1.us-east.bsky.network"
     wanted_collection: str = "app.bsky.feed.post"
     trust: float = 0.5
 
@@ -101,6 +107,11 @@ class Sources(BaseModel):
     claudecoworkcourse: ClaudeCoworkCourseSource = Field(default_factory=ClaudeCoworkCourseSource)
     oneparrainage: OneParrainageSource = Field(default_factory=OneParrainageSource)
     telegram_preview: TelegramPreviewSource = Field(default_factory=TelegramPreviewSource)
+    bluesky_search: BlueskySearchSource = Field(default_factory=BlueskySearchSource)
+    mastodon: MastodonSource = Field(default_factory=MastodonSource)
+    reddit: RedditSource = Field(default_factory=RedditSource)
+    github: GitHubSource = Field(default_factory=GitHubSource)
+    web_search: WebSearchSource = Field(default_factory=WebSearchSource)
 
 
 class NotifyTelegram(BaseModel):

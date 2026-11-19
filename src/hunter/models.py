@@ -51,3 +51,5 @@ class Alert(BaseModel):
     age_seconds: float | None = None
     sources: list[str] = Field(default_factory=list)
     row_id: int | None = None        # alerts table row, set by the pipeline
+    reliability_tier: str = "unknown"
+    validation_status: str = "verified"

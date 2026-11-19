@@ -14,14 +14,10 @@ import httpx
 from ..models import RawItem
 from .base import Collector
 
-# t.me/s pages embed messages in <div class="tgme_widget_message ..."> blocks
-# with a datetime attribute and permalinks like t.me/<handle>/<id>.
-_MSG_SPLIT_RE = re.compile(r'(?=<div class="tgme_widget_message[ "])')
-_DATETIME_RE = re.compile(r'datetime="(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})"')
+# Real t.me/s pages: <div class="tgme_widget_message_wrap"> containing
+# <div class="tgme_widget_message ..." data-post="channel/123"> with a
+# <time datetime="2026-11-17T11:59:00+00:00"> and a .tgme_widget_message_text.
 _PERMALINK_RE = re.compile(r"t\.me/(\w+)/(\d+)")
-_TEXT_RE = re.compile(r'<div class="tgme_widget_message_text[^"]*"[^>]*>(.*?)</div>', re.S)
-_TAG_RE = re.compile(r"<[^>]+>")
-_HTML_ENTITIES = {"&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&nbsp;": " "}
 
 
 class TelegramPreviewCollector(Collector):
@@ -57,37 +53,62 @@ class TelegramPreviewCollector(Collector):
         return self.parse(handle, resp.text, now=now)
 
     def parse(self, handle: str, html: str, *, now: datetime) -> list[RawItem]:
+        from selectolax.parser import HTMLParser
+
+        tree = HTMLParser(html)
         items: list[RawItem] = []
-        for chunk in _MSG_SPLIT_RE.split(html):
-            idm = _PERMALINK_RE.search(chunk)
-            if not idm:
-                continue
-            _, msg_id = idm.group(1), idm.group(2)
+        wraps = tree.css("div.tgme_widget_message_wrap")
+        if not wraps:
+            wraps = tree.css("div.tgme_widget_message")
+        for wrap in wraps:
+            msg = wrap.css_first("div.tgme_widget_message") or wrap
+
+            # Prefer the canonical data-post attribute; fall back to the first
+            # t.me/<channel>/<id> link in the block (older/minimal markup).
+            msg_id = ""
+            data_post = msg.attributes.get("data-post") or ""
+            if "/" in data_post:
+                msg_id = data_post.rsplit("/", 1)[-1]
+            if not msg_id:
+                match = _PERMALINK_RE.search(wrap.html or "")
+                if not match:
+                    continue
+                msg_id = match.group(2)
+
             item_id = f"{handle}/{msg_id}"
             if item_id in self._seen:
                 continue
             self._seen.add(item_id)
-            text = ""
-            tm = _TEXT_RE.search(chunk)
-            if tm:
-                text = tm.group(1)
-                text = _TAG_RE.sub("", text)
-                for k, v in _HTML_ENTITIES.items():
-                    text = text.replace(k, v)
+
+            text_node = msg.css_first(".tgme_widget_message_text")
+            text = text_node.text(separator=" ") if text_node else ""
+
+            # Preserve anchor hrefs: a referral link may be the link target
+            # while the visible text is just "here" or "Try".
+            urls: list[str] = []
+            for anchor in msg.css("a[href]"):
+                href = anchor.attributes.get("href") or ""
+                if href.startswith(("http://", "https://")):
+                    urls.append(href)
+
             posted = None
-            dm = _DATETIME_RE.search(chunk)
-            if dm:
+            time_node = msg.css_first("time[datetime]")
+            raw_dt = time_node.attributes.get("datetime") if time_node else None
+            if raw_dt:
                 try:
-                    posted = datetime.fromisoformat(dm.group(1)).replace(tzinfo=UTC)
+                    posted = datetime.fromisoformat(raw_dt.replace("Z", "+00:00"))
+                    if posted.tzinfo is None:
+                        posted = posted.replace(tzinfo=UTC)
                 except ValueError:
                     posted = None
+
             items.append(
                 RawItem(
                     source=self.name,
                     item_id=item_id,
                     author=handle,
                     text=text,
-                    urls=[],
+                    urls=urls,
                     permalink=f"https://t.me/{handle}/{msg_id}",
                     posted_at=posted,
                     fetched_at=now,

@@ -63,8 +63,9 @@ src/hunter/
   normalize.py     canonical codes, dedup, re-alert rules
   score.py         scoring and confidence tags
   pipeline.py      RawItem -> Alert orchestrator
-  collectors/      lemmy, bluesky, hackernews, claudecoworkcourse,
-                   oneparrainage (gated), telegram_preview
+  collectors/      lemmy, bluesky, bluesky_search, hackernews, reddit,
+                   mastodon, github, claudecoworkcourse, oneparrainage
+                   (gated), telegram_preview, web_search
   notify/          telegram sender, formatter, queue, commands
   feedback.py      button callbacks -> votes -> scores -> mutes
   scheduler.py     collector supervision and health
@@ -75,12 +76,33 @@ src/hunter/
 
 | Source | Method | Notes |
 |---|---|---|
-| Lemmy | public search API, no auth | mirror may lag r/ClaudeCode |
-| Bluesky | Jetstream firehose | client-side substring match |
+| Lemmy | public search API, no auth | falls back to instance-wide search |
+| Bluesky | Jetstream firehose | real-time, client-side substring match |
+| Bluesky search | public AppView `searchPosts` | catches posts made while offline |
 | Hacker News | Algolia `search_by_date` | free |
+| Reddit | PullPush / Reddit JSON / Arctic Shift | public posts, no auth |
+| Mastodon | public hashtag timelines | no auth; public search is mostly empty |
+| GitHub | public issues search | **disabled by default** (~10 req/min limit) |
 | claudecoworkcourse | public page, robots.txt checked | relative timestamps → approximate ages |
 | 1parrainage | public page | **disabled until manual robots/ToS review** |
 | Telegram | `t.me/s/<handle>` preview | empty seed list by default |
+| Web search | DuckDuckGo / Bing | **disabled by default** (often blocked) |
+
+## Getting links right now
+
+The monitor only alerts on *fresh* posts (within the 30-minute staleness
+cutoff), so a directory of older codes will be correctly filtered out. To grab
+whatever is publicly available immediately, use the standalone probe — it needs
+no config, DB or Telegram:
+
+```bash
+.venv\Scripts\python tools/find_links.py
+.venv\Scripts\python tools/find_links.py --write data/found_links.jsonl
+```
+
+It queries several public sources, filters obvious troll codes, and prints the
+most plausible recent links. Guest passes are first-come, first-served, so many
+will already be claimed.
 
 ToS and limitations: Anthropic's Guest Pass Terms forbid selling passes,
 posting them on deal/referral-exchange sites, or bulk/automated distribution.

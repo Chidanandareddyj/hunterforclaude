@@ -4,6 +4,13 @@ Polls the public directory page. robots.txt is checked programmatically at
 startup and the collector disables itself if disallowed. Relative timestamps
 ("3h ago") are converted to approximate absolute times with a margin, and the
 source is marked low-confidence since directory codes may already be exhausted.
+
+The live page is a table of ``tr.gpx-row`` entries. Genuine live rows carry the
+``gpx-row--unverified`` class (or no modifier at all) and a relative age in a
+cell. Retired rows are marked with ``gpx-row--retired``/``gpx-retired-row``,
+usually also ``hidden`` and with a "100 / 100" or "100 clicks" marker. Only
+retired rows are skipped; live rows are kept even if their age is not shown
+(the scorer caps confidence for unknown-age items).
 """
 
 from __future__ import annotations
@@ -39,10 +46,22 @@ _UNIT_SECONDS = {
     "w": 604800,
     "week": 604800,
     "weeks": 604800,
+    "mo": 2592000,
+    "mon": 2592000,
+    "month": 2592000,
+    "months": 2592000,
+    "y": 31536000,
+    "yr": 31536000,
+    "year": 31536000,
+    "years": 31536000,
 }
 
 _REL_TIME_RE = re.compile(r"\b(\d+)\s*([a-z]+)\s*ago\b", re.I)
-_CODE_RE = re.compile(r"claude\.ai/referral/([A-Za-z0-9_]{6,20})")
+# Capture the *whole* code. The live directory contains codes longer than the
+# config's 6..20 window (e.g. 23 chars); truncating them would emit a wrong
+# code. Downstream matching against the configured pattern decides validity.
+_CODE_RE = re.compile(r"claude\.ai/referral/([A-Za-z0-9_]{4,60})")
+_RETIRED_MARKERS = ("retired", "100 / 100", "100 clicks")
 
 
 class ClaudeCoworkCourseCollector(Collector):
@@ -78,37 +97,45 @@ class ClaudeCoworkCourseCollector(Collector):
         tree = HTMLParser(html)
         items: list[RawItem] = []
         now = now.astimezone(UTC)
-        # Each directory entry is some block containing a link and a relative time.
+        seen: set[str] = set()
         for node in tree.css("a"):
             href = node.attributes.get("href") or ""
-            m = _CODE_RE.search(href)
-            if not m:
-                text = node.text() if node.text() else ""
-                m2 = _CODE_RE.search(text)
-                if not m2:
-                    continue
-                code = m2.group(1)
-            else:
-                code = m.group(1)
-            # Find the closest ancestor card and its relative-time text.
+            match = _CODE_RE.search(href) or _CODE_RE.search(node.text() or "")
+            if not match:
+                continue
+            code = match.group(1)
+
+            row = self._row_of(node)
+            if self._is_retired(node, row):
+                continue
+            if code in seen:
+                continue
+            seen.add(code)
+
+            # Look for a relative age on the row first, then walk a few
+            # ancestors for card-like layouts that have no explicit row.
             rel_text = ""
-            ancestor = node.parent
-            for _ in range(4):
-                if ancestor is None:
+            ancestor = row or node.parent
+            for _ in range(5):
+                # Never climb out of the row into the table: a sibling row's
+                # age would otherwise be attributed to an undated live row.
+                if ancestor is None or ancestor.tag in ("table", "tbody", "section", "body", "html"):
                     break
-                found = _REL_TIME_RE.search(ancestor.text() or "")
+                found = _REL_TIME_RE.search(ancestor.text(separator=" ") or "")
                 if found:
                     rel_text = found.group(0)
                     break
                 ancestor = ancestor.parent
-            posted = self._rel_to_abs(rel_text, now)
-            item_id = f"{code}/{int(posted.timestamp()) if posted else 'unknown'}"
+
+            posted = self._rel_to_abs(rel_text, now)  # None for undated rows
             items.append(
                 RawItem(
                     source=self.name,
-                    item_id=item_id,
+                    # Stable id: the code itself. Using the recomputed relative
+                    # timestamp here changed every poll and caused repeat alerts.
+                    item_id=code,
                     author=self.name,
-                    text=f"{href}",
+                    text=href,
                     urls=[f"https://claude.ai/referral/{code}"],
                     permalink=self.cfg.url,
                     posted_at=posted,
@@ -116,6 +143,37 @@ class ClaudeCoworkCourseCollector(Collector):
                 )
             )
         return items
+
+    @staticmethod
+    def _row_of(node):
+        """Closest row-like container for a link (live table row, retired
+        list item, or generic card). ``None`` when there is no obvious row."""
+        ancestor = node.parent
+        while ancestor is not None:
+            if ancestor.tag in ("body", "html", "table", "tbody", "section"):
+                return None
+            classes = (ancestor.attributes.get("class") or "").lower()
+            if ancestor.tag in ("tr", "li") or "gpx-row" in classes or "card" in classes:
+                return ancestor
+            ancestor = ancestor.parent
+        return None
+
+    @staticmethod
+    def _is_retired(node, row) -> bool:
+        """Only genuinely retired/hidden rows are skipped."""
+        ancestor = node
+        while ancestor is not None:
+            classes = (ancestor.attributes.get("class") or "").lower()
+            if "retired" in classes or ancestor.attributes.get("hidden") is not None:
+                return True
+            if ancestor is row:
+                break
+            ancestor = ancestor.parent
+        if row is not None:
+            lowered = (row.text(separator=" ") or "").lower()
+            if any(marker in lowered for marker in _RETIRED_MARKERS):
+                return True
+        return False
 
     def _rel_to_abs(self, rel_text: str, now: datetime) -> datetime | None:
         m = _REL_TIME_RE.search(rel_text)
